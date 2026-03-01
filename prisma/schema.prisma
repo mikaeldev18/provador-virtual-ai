@@ -1,0 +1,75 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  password     String
+  name         String
+  storeName    String
+  storeUrl     String
+  storeId      String        @unique
+  apiKey       String        @unique
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  subscription Subscription?
+  usages       Usage[]
+  payments     Payment[]
+}
+
+model Subscription {
+  id               String   @id @default(cuid())
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status           String   @default("inactive") // active, inactive, cancelled, past_due
+  abacatePayId     String?
+  abacatePayBillId String?
+  plan             String   @default("basic")
+  priceMonthly     Int      @default(1990) // centavos
+  freeUsesLimit    Int      @default(100)
+  extraUseCost     Int      @default(10)  // centavos por uso extra
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model Usage {
+  id          String   @id @default(cuid())
+  storeId     String
+  user        User     @relation(fields: [storeId], references: [storeId])
+  sessionId   String?
+  productUrl  String?
+  productName String?
+  converted   Boolean  @default(false)
+  revenue     Float    @default(0)      // receita gerada pela conversão
+  cost        Float    @default(0.05)   // custo real da chamada IA (R$)
+  billedExtra Boolean  @default(false)  // se foi cobrado como extra
+  timestamp   DateTime @default(now())
+
+  @@index([storeId])
+  @@index([timestamp])
+}
+
+model Payment {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  amount       Int      // centavos
+  status       String   @default("pending") // pending, paid, failed, expired
+  abacatePayId String?
+  type         String   // subscription, extra_usage
+  description  String?
+  paidAt       DateTime?
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+}
