@@ -11,22 +11,27 @@ export interface TryOnResult {
 
 type ImageInput = string | Blob;
 
+// cuuupid/idm-vton — modelo de virtual try-on funcional no Replicate
+const MODEL_VERSION = '0513734a452173b8173e907e3a59d19a36266e55b48528559432bd21c7d7e985';
+
 // ─── Async prediction (non-blocking) ──────────────────────────────────────────
 
 export async function createTryOnPrediction(params: {
   userPhotoUrl: ImageInput;
   garmentUrl: ImageInput;
-  category?: string;
+  garmentDesc?: string;
+  category?: 'upper_body' | 'lower_body' | 'dresses';
 }): Promise<{ predictionId: string; cost: number }> {
   const prediction = await replicate.predictions.create({
-    version: '78ae3c3e3f24a4b1fb96e0d85c88f5e79d27d5048a9ce3c8697bace2da1e7df6',
+    version: MODEL_VERSION,
     input: {
-      human_image: params.userPhotoUrl,
-      garment_image: params.garmentUrl,
-      cloth_type: params.category ?? 'upper_body',
-      num_inference_steps: 30,
-      guidance_scale: 2.5,
+      human_img: params.userPhotoUrl,
+      garm_img: params.garmentUrl,
+      garment_des: params.garmentDesc ?? 'roupa',
+      category: params.category ?? 'upper_body',
+      crop: true,
       seed: Math.floor(Math.random() * 1000000),
+      steps: 30,
     },
   });
 

@@ -120,6 +120,7 @@ export async function POST(req: NextRequest) {
     const { predictionId, cost } = await createTryOnPrediction({
       userPhotoUrl: userPhoto as string,
       garmentUrl:   garment  as string,
+      garmentDesc:  productName ?? 'roupa',
     });
 
     // Registra uso (com custo estimado)
