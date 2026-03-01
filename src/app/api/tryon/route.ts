@@ -2,20 +2,42 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { runVirtualTryOnSafe } from '@/lib/replicate';
 
+// ─── CORS headers (widget roda em domínios externos como Shopify) ─────────────
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: CORS });
+}
+
+// ─── Rate limiting ────────────────────────────────────────────────────────────
 const RATE_LIMIT_MAP = new Map<string, { count: number; resetAt: number }>();
 
 function checkRateLimit(storeId: string): boolean {
   const now = Date.now();
   const entry = RATE_LIMIT_MAP.get(storeId);
-
   if (!entry || now > entry.resetAt) {
     RATE_LIMIT_MAP.set(storeId, { count: 1, resetAt: now + 60_000 });
     return true;
   }
-
-  if (entry.count >= 10) return false; // max 10 req/min por loja
+  if (entry.count >= 10) return false;
   entry.count++;
   return true;
+}
+
+// ─── Converte base64 data URL para Blob (Replicate aceita Blob/File) ──────────
+function dataUrlToBlob(dataUrl: string): Blob {
+  const [header, base64] = dataUrl.split(',');
+  const mime = header.match(/:(.*?);/)?.[1] ?? 'image/jpeg';
+  const binary = Buffer.from(base64, 'base64');
+  return new Blob([binary], { type: mime });
+}
+
+function isDataUrl(str: string): boolean {
+  return str.startsWith('data:');
 }
 
 export async function POST(req: NextRequest) {
@@ -26,7 +48,7 @@ export async function POST(req: NextRequest) {
     if (!storeId || !userPhotoUrl || !garmentUrl) {
       return NextResponse.json(
         { error: 'storeId, userPhotoUrl e garmentUrl são obrigatórios' },
-        { status: 400 }
+        { status: 400, headers: CORS }
       );
     }
 
@@ -37,22 +59,25 @@ export async function POST(req: NextRequest) {
     });
 
     if (!user) {
-      return NextResponse.json({ error: 'Loja não encontrada' }, { status: 404 });
+      return NextResponse.json({ error: 'Loja não encontrada' }, { status: 404, headers: CORS });
     }
 
     if (user.subscription?.status !== 'active') {
       return NextResponse.json(
         { error: 'Plano inativo. Ative sua assinatura no dashboard.' },
-        { status: 403 }
+        { status: 403, headers: CORS }
       );
     }
 
     // Rate limiting
     if (!checkRateLimit(storeId)) {
-      return NextResponse.json({ error: 'Muitas requisições. Aguarde.' }, { status: 429 });
+      return NextResponse.json(
+        { error: 'Muitas requisições. Aguarde.' },
+        { status: 429, headers: CORS }
+      );
     }
 
-    // Verifica limite mensal e se deve cobrar extra
+    // Verifica limite mensal
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const usesThisMonth = await prisma.usage.count({
@@ -62,10 +87,14 @@ export async function POST(req: NextRequest) {
     const freeLimit = user.subscription?.freeUsesLimit ?? 100;
     const isExtra = usesThisMonth >= freeLimit;
 
+    // Converte base64 → Blob se necessário
+    const userPhoto = isDataUrl(userPhotoUrl) ? dataUrlToBlob(userPhotoUrl) : userPhotoUrl;
+    const garment  = isDataUrl(garmentUrl)   ? dataUrlToBlob(garmentUrl)   : garmentUrl;
+
     // Executa try-on IA
     const { imageUrl, cost } = await runVirtualTryOnSafe({
-      userPhotoUrl,
-      garmentUrl,
+      userPhotoUrl: userPhoto as string,
+      garmentUrl:   garment  as string,
     });
 
     // Registra uso
@@ -80,30 +109,31 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    return NextResponse.json({
-      success: true,
-      imageUrl,
-      isExtra,
-      message: isExtra
-        ? 'Uso extra registrado. Será cobrado na próxima fatura.'
-        : 'Uso incluído no plano.',
-    });
+    return NextResponse.json(
+      { success: true, imageUrl, isExtra },
+      { headers: CORS }
+    );
   } catch (error) {
     console.error('TryOn error:', error);
-    return NextResponse.json({ error: 'Erro ao processar imagem. Tente novamente.' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Erro ao processar imagem. Tente novamente.' },
+      { status: 500, headers: CORS }
+    );
   }
 }
 
-// Registrar conversão (chamado pelo widget quando cliente clica em comprar)
+// ─── Registrar conversão ──────────────────────────────────────────────────────
 export async function PATCH(req: NextRequest) {
   try {
     const { sessionId, storeId, revenue } = await req.json();
 
     if (!sessionId || !storeId) {
-      return NextResponse.json({ error: 'sessionId e storeId são obrigatórios' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'sessionId e storeId são obrigatórios' },
+        { status: 400, headers: CORS }
+      );
     }
 
-    // Atualiza o uso mais recente desta sessão
     const usage = await prisma.usage.findFirst({
       where: { storeId, sessionId },
       orderBy: { timestamp: 'desc' },
@@ -116,9 +146,9 @@ export async function PATCH(req: NextRequest) {
       });
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true }, { headers: CORS });
   } catch (error) {
     console.error('Conversion track error:', error);
-    return NextResponse.json({ error: 'Erro interno' }, { status: 500 });
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500, headers: CORS });
   }
 }
