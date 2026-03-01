@@ -1,4 +1,9 @@
 {
   "buildCommand": "prisma generate && next build",
-  "framework": "nextjs"
+  "framework": "nextjs",
+  "functions": {
+    "src/app/api/tryon/route.ts": {
+      "maxDuration": 60
+    }
+  }
 }

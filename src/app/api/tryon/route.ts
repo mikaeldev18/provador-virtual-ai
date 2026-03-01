@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { runVirtualTryOnSafe } from '@/lib/replicate';
+import { createTryOnPrediction, getTryOnStatus } from '@/lib/replicate';
 
 // ─── CORS headers (widget roda em domínios externos como Shopify) ─────────────
 const CORS = {
@@ -28,7 +28,7 @@ function checkRateLimit(storeId: string): boolean {
   return true;
 }
 
-// ─── Converte base64 data URL para Blob (Replicate aceita Blob/File) ──────────
+// ─── Converte base64 data URL para Blob ───────────────────────────────────────
 function dataUrlToBlob(dataUrl: string): Blob {
   const [header, base64] = dataUrl.split(',');
   const mime = header.match(/:(.*?);/)?.[1] ?? 'image/jpeg';
@@ -40,6 +40,31 @@ function isDataUrl(str: string): boolean {
   return str.startsWith('data:');
 }
 
+// ─── GET: consulta status de uma predição ─────────────────────────────────────
+export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  const predictionId = searchParams.get('id');
+
+  if (!predictionId) {
+    return NextResponse.json(
+      { error: 'id é obrigatório' },
+      { status: 400, headers: CORS }
+    );
+  }
+
+  try {
+    const result = await getTryOnStatus(predictionId);
+    return NextResponse.json(result, { headers: CORS });
+  } catch (error) {
+    console.error('Status check error:', error);
+    return NextResponse.json(
+      { status: 'failed', error: 'Erro ao verificar status' },
+      { headers: CORS }
+    );
+  }
+}
+
+// ─── POST: inicia geração (retorna imediatamente com predictionId) ─────────────
 export async function POST(req: NextRequest) {
   try {
     const { storeId, userPhotoUrl, garmentUrl, productUrl, productName, sessionId } =
@@ -91,13 +116,13 @@ export async function POST(req: NextRequest) {
     const userPhoto = isDataUrl(userPhotoUrl) ? dataUrlToBlob(userPhotoUrl) : userPhotoUrl;
     const garment  = isDataUrl(garmentUrl)   ? dataUrlToBlob(garmentUrl)   : garmentUrl;
 
-    // Executa try-on IA
-    const { imageUrl, cost } = await runVirtualTryOnSafe({
+    // Cria predição de forma assíncrona (não bloqueia a função)
+    const { predictionId, cost } = await createTryOnPrediction({
       userPhotoUrl: userPhoto as string,
       garmentUrl:   garment  as string,
     });
 
-    // Registra uso
+    // Registra uso (com custo estimado)
     await prisma.usage.create({
       data: {
         storeId,
@@ -110,19 +135,19 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json(
-      { success: true, imageUrl, isExtra },
+      { success: true, predictionId, isExtra },
       { headers: CORS }
     );
   } catch (error) {
     console.error('TryOn error:', error);
     return NextResponse.json(
-      { error: 'Erro ao processar imagem. Tente novamente.' },
+      { error: 'Erro ao iniciar geração. Tente novamente.' },
       { status: 500, headers: CORS }
     );
   }
 }
 
-// ─── Registrar conversão ──────────────────────────────────────────────────────
+// ─── PATCH: registrar conversão ───────────────────────────────────────────────
 export async function PATCH(req: NextRequest) {
   try {
     const { sessionId, storeId, revenue } = await req.json();

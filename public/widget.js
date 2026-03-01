@@ -874,6 +874,8 @@
   }
 
   // ─── TryOn Submit ─────────────────────────────────────────────────────────────
+  var pollAttempts = 0;
+
   function submitTryOn() {
     if (!state.userPhotoUrl) {
       showStep1Error('Por favor, envie ou tire uma foto primeiro.');
@@ -884,8 +886,10 @@
       return;
     }
 
+    pollAttempts = 0;
     goToStep(2);
 
+    // 1. Cria a predição (rápido, retorna predictionId)
     fetch(API_URL + '/api/tryon', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -901,13 +905,47 @@
       .then(function (res) { return res.json(); })
       .then(function (data) {
         if (data.error) throw new Error(data.error);
-        state.resultUrl = data.imageUrl;
-        showResult();
+        // 2. Aguarda resultado via polling
+        pollPrediction(data.predictionId);
       })
       .catch(function (err) {
         goToStep(1);
-        showStep1Error(err.message || 'Erro ao processar. Tente novamente.');
+        showStep1Error(err.message || 'Erro ao iniciar. Tente novamente.');
       });
+  }
+
+  // Consulta o status a cada 3s até concluir (máx. 2 minutos)
+  function pollPrediction(predictionId) {
+    if (pollAttempts >= 40) {
+      goToStep(1);
+      pollAttempts = 0;
+      showStep1Error('Tempo esgotado. Tente novamente.');
+      return;
+    }
+    pollAttempts++;
+
+    setTimeout(function () {
+      fetch(API_URL + '/api/tryon?id=' + predictionId)
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          if (data.status === 'succeeded') {
+            state.resultUrl = data.imageUrl;
+            pollAttempts = 0;
+            showResult();
+          } else if (data.status === 'failed') {
+            goToStep(1);
+            pollAttempts = 0;
+            showStep1Error(data.error || 'Erro ao gerar imagem. Tente novamente.');
+          } else {
+            // starting | processing — continua aguardando
+            pollPrediction(predictionId);
+          }
+        })
+        .catch(function () {
+          // Erro de rede — tenta novamente
+          pollPrediction(predictionId);
+        });
+    }, 3000);
   }
 
   function showResult() {
