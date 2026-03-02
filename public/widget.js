@@ -6,7 +6,12 @@
 (function () {
   'use strict';
 
-  var API_URL = 'https://provadorvirtual.ai';
+  // Detecta a origem do script para que o widget funcione em qualquer deploy
+  var _currentScript = document.currentScript ||
+    (function () { var s = document.getElementsByTagName('script'); return s[s.length - 1]; })();
+  var API_URL = _currentScript && _currentScript.src
+    ? new URL(_currentScript.src).origin
+    : 'https://provador-virtual-ai.vercel.app';
   var SESSION_ID = 'pvai_' + Math.random().toString(36).slice(2, 10);
 
   // ─── Estilos do Widget ────────────────────────────────────────────────────────
