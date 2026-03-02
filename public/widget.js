@@ -470,6 +470,48 @@
       z-index: 0;
     }
     #pvai-modal { position: relative; z-index: 1; }
+
+    /* ── Banner trigger (modo fixo) ──────────────────────────────── */
+    #pvai-banner-trigger { cursor: pointer; display: block; }
+    .pvai-banner-default {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background: linear-gradient(135deg, #db2777 0%, #be185d 100%);
+      color: white;
+      padding: 16px 20px;
+      border-radius: 16px;
+      box-shadow: 0 4px 16px rgba(219,39,119,0.25);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      user-select: none;
+    }
+    .pvai-banner-default:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(219,39,119,0.35);
+    }
+    .pvai-banner-icon {
+      width: 44px; height: 44px;
+      background: rgba(255,255,255,0.2);
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .pvai-banner-icon svg { width: 20px; height: 20px; }
+    .pvai-banner-text { flex: 1; }
+    .pvai-banner-title { font-size: 15px; font-weight: 700; line-height: 1.2; }
+    .pvai-banner-sub { font-size: 12px; opacity: 0.85; margin-top: 2px; }
+    .pvai-banner-arrow {
+      width: 32px; height: 32px;
+      background: rgba(255,255,255,0.2);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .pvai-banner-img-wrap { display: block; cursor: pointer; transition: opacity 0.15s; }
+    .pvai-banner-img-wrap:hover { opacity: 0.9; }
+    .pvai-banner-img-wrap img { display: block; max-width: 100%; height: auto; }
   `;
 
   // ─── SVGs ─────────────────────────────────────────────────────────────────────
@@ -515,6 +557,10 @@
       if (match) API_URL = match[1];
     }
 
+    var mode      = container.dataset.mode   || 'float'; // 'float' | 'banner'
+    var bannerSrc = container.dataset.banner || 'default';
+    var color     = container.dataset.color  || '#db2777';
+
     // Detect garment from page
     state.garmentUrl = detectGarmentImage();
     state.garmentName = detectProductName();
@@ -522,8 +568,67 @@
     state.buyUrl = detectBuyUrl();
 
     injectStyles();
-    createTriggerButton();
+    if (color !== '#db2777') injectColorOverride(color);
+
+    if (mode === 'banner') {
+      createBannerTrigger(container, bannerSrc);
+    } else {
+      createTriggerButton();
+    }
     createModal();
+  }
+
+  // ─── Personalização de cor ────────────────────────────────────────────────────
+  function injectColorOverride(hex) {
+    var r = parseInt(hex.slice(1, 3), 16) || 219;
+    var g = parseInt(hex.slice(3, 5), 16) || 39;
+    var b = parseInt(hex.slice(5, 7), 16) || 119;
+    var rgb  = r + ',' + g + ',' + b;
+    var dark = '#' + [r * 0.78, g * 0.78, b * 0.78].map(function(v) {
+      return Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0');
+    }).join('');
+    var light = '#' + [r + (255-r)*0.45, g + (255-g)*0.45, b + (255-b)*0.45].map(function(v) {
+      return Math.min(255, Math.round(v)).toString(16).padStart(2, '0');
+    }).join('');
+    var s = document.createElement('style');
+    s.textContent = [
+      '#pvai-trigger{background:linear-gradient(135deg,'+hex+' 0%,'+dark+' 100%)!important;box-shadow:0 8px 24px rgba('+rgb+',0.35),0 2px 8px rgba(0,0,0,0.1)!important}',
+      '#pvai-trigger:hover{box-shadow:0 12px 32px rgba('+rgb+',0.45),0 4px 12px rgba(0,0,0,0.15)!important}',
+      '.pvai-logo-icon{background:linear-gradient(135deg,'+hex+','+dark+')!important}',
+      '.pvai-logo-text span{color:'+hex+'!important}',
+      '.pvai-footer a{color:'+hex+'!important}',
+      '.pvai-badge{background:rgba('+rgb+',0.25)!important}',
+      '.pvai-upload-area:hover,.pvai-upload-area.pvai-drag-over{border-color:'+hex+'!important}',
+      '.pvai-camera-btn:hover{border-color:'+hex+'!important;color:'+hex+'!important}',
+      '.pvai-spinner{border-top-color:'+hex+'!important;border-color:rgba('+rgb+',0.15)!important}',
+      '.pvai-progress-fill{background:linear-gradient(90deg,'+hex+','+light+')!important}',
+      '.pvai-ai-badge{background:'+hex+'!important}',
+      '.pvai-btn-primary,.pvai-submit-btn{background:linear-gradient(135deg,'+hex+','+dark+')!important;box-shadow:0 4px 12px rgba('+rgb+',0.3)!important}',
+      '.pvai-btn-primary:hover,.pvai-submit-btn:not(:disabled):hover{box-shadow:0 6px 16px rgba('+rgb+',0.4)!important}',
+      '.pvai-banner-default{background:linear-gradient(135deg,'+hex+' 0%,'+dark+' 100%)!important;box-shadow:0 4px 16px rgba('+rgb+',0.25)!important}',
+      '.pvai-banner-default:hover{box-shadow:0 8px 24px rgba('+rgb+',0.35)!important}',
+    ].join('\n');
+    document.head.appendChild(s);
+  }
+
+  // ─── Banner trigger (modo fixo) ───────────────────────────────────────────────
+  function createBannerTrigger(container, bannerSrc) {
+    var wrap = document.createElement('div');
+    wrap.id = 'pvai-banner-trigger';
+    if (bannerSrc && bannerSrc !== 'default') {
+      wrap.innerHTML = '<div class="pvai-banner-img-wrap"><img src="' + bannerSrc + '" alt="Experimentar virtualmente com IA" /></div>';
+    } else {
+      wrap.innerHTML = '<div class="pvai-banner-default">' +
+        '<div class="pvai-banner-icon">' + ICON_SPARKLES.replace('stroke="currentColor"', 'stroke="white"') + '</div>' +
+        '<div class="pvai-banner-text">' +
+          '<div class="pvai-banner-title">Experimentar Virtualmente</div>' +
+          '<div class="pvai-banner-sub">Veja como fica antes de comprar · IA</div>' +
+        '</div>' +
+        '<div class="pvai-banner-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" width="14" height="14"><polyline points="9 18 15 12 9 6"/></svg></div>' +
+        '</div>';
+    }
+    wrap.onclick = openModal;
+    container.appendChild(wrap);
   }
 
   function detectGarmentImage() {

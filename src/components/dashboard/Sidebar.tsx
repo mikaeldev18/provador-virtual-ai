@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils';
 const navItems = [
   { href: '/dashboard', label: 'Visão Geral', icon: LayoutDashboard },
   { href: '/dashboard/analytics', label: 'Analytics', icon: BarChart3 },
-  { href: '/dashboard/embed', label: 'Código Embed', icon: Code2 },
+  { href: '/dashboard/embed', label: 'Implementação', icon: Code2 },
   { href: '/dashboard/billing', label: 'Fatura e Plano', icon: CreditCard },
   { href: '/dashboard/settings', label: 'Configurações', icon: Settings },
 ];
