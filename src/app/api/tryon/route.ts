@@ -118,8 +118,8 @@ export async function POST(req: NextRequest) {
 
     // Cria predição de forma assíncrona (não bloqueia a função)
     const { predictionId, cost } = await createTryOnPrediction({
-      userPhotoUrl: userPhoto as string,
-      garmentUrl:   garment  as string,
+      userPhotoUrl: userPhoto,
+      garmentUrl:   garment,
       garmentDesc:  productName ?? 'roupa',
     });
 
