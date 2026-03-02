@@ -1056,10 +1056,23 @@
       fetch(API_URL + '/api/tryon?id=' + predictionId)
         .then(function (res) { return res.json(); })
         .then(function (data) {
+          console.log('[PVAI] poll status:', data.status, data.imageUrl || data.error || '');
           if (data.status === 'succeeded') {
             state.resultUrl = data.imageUrl;
             pollAttempts = 0;
-            showResult();
+            try {
+              showResult();
+            } catch (e) {
+              console.error('[PVAI] showResult error:', e);
+              // Fallback: mostra a imagem diretamente sem comparação
+              goToStep(3);
+              var c = document.getElementById('pvai-result-content');
+              if (c) c.innerHTML =
+                '<div style="padding:16px;text-align:center">' +
+                '<img src="' + state.resultUrl + '" style="max-width:100%;border-radius:12px;margin-bottom:12px" />' +
+                '<br><a href="' + state.resultUrl + '" target="_blank" style="color:#db2777;font-size:13px">Abrir imagem →</a>' +
+                '</div>';
+            }
           } else if (data.status === 'failed') {
             goToStep(1);
             pollAttempts = 0;
@@ -1069,51 +1082,64 @@
             pollPrediction(predictionId);
           }
         })
-        .catch(function () {
-          // Erro de rede — tenta novamente
+        .catch(function (networkErr) {
+          // Apenas erros de rede chegam aqui — tenta novamente
+          console.warn('[PVAI] poll network error, retrying…', networkErr);
           pollPrediction(predictionId);
         });
     }, 3000);
   }
 
   function showResult() {
+    // Garante que o modal está aberto (usuário pode ter fechado enquanto aguardava)
+    openModal();
     goToStep(3);
-    var container = document.getElementById('pvai-result-content');
-    container.innerHTML = `
-      <p style="font-size:14px;font-weight:600;color:#111;margin-bottom:12px;">
-        ✨ Seu look virtual está pronto!
-      </p>
-      <div class="pvai-result-compare">
-        <div class="pvai-compare-item">
-          <img src="${state.userPhotoUrl}" alt="Você" />
-          <span class="pvai-compare-label">Você</span>
-        </div>
-        <div class="pvai-compare-item">
-          <img src="${state.resultUrl}" alt="Com a peça" />
-          <span class="pvai-compare-label">Com a peça</span>
-          <span class="pvai-ai-badge">IA</span>
-        </div>
-      </div>
-      <a href="${state.buyUrl || state.productUrl}" class="pvai-btn-primary" id="pvai-buy-btn" target="_blank">
-        ${ICON_CART.replace('stroke="currentColor"', 'stroke="white"')} Comprar agora
-      </a>
-      <button class="pvai-btn-secondary" id="pvai-retry-btn">
-        ${ICON_RETRY} Tentar com outra foto
-      </button>
-      <button class="pvai-btn-secondary" id="pvai-share-btn" style="margin-top:4px;">
-        ${ICON_SHARE} Compartilhar look
-      </button>
-    `;
 
-    document.getElementById('pvai-buy-btn').onclick = trackConversion;
-    document.getElementById('pvai-retry-btn').onclick = function () {
+    var container = document.getElementById('pvai-result-content');
+    if (!container) throw new Error('pvai-result-content not found');
+
+    var userImgSrc = state.userPhotoUrl || '';
+    var resultImgSrc = state.resultUrl || '';
+    var buyHref = state.buyUrl || state.productUrl || '#';
+
+    container.innerHTML =
+      '<p style="font-size:14px;font-weight:600;color:#111;margin-bottom:12px;">&#10024; Seu look virtual est\u00e1 pronto!</p>' +
+      '<div class="pvai-result-compare">' +
+        '<div class="pvai-compare-item">' +
+          '<img src="' + userImgSrc + '" alt="Voc\u00ea" />' +
+          '<span class="pvai-compare-label">Voc\u00ea</span>' +
+        '</div>' +
+        '<div class="pvai-compare-item" id="pvai-result-img-wrap">' +
+          '<img src="' + resultImgSrc + '" alt="Com a pe\u00e7a"' +
+               ' onerror="this.onerror=null;document.getElementById(\'pvai-result-img-wrap\').innerHTML=\'<a href=\\\'' + resultImgSrc + '\\\' target=\\\'_blank\\\' style=\\\'display:flex;align-items:center;justify-content:center;height:100%;color:#db2777;font-size:12px\\\'>Ver imagem &rarr;</a>\'" />' +
+          '<span class="pvai-compare-label">Com a pe\u00e7a</span>' +
+          '<span class="pvai-ai-badge">IA</span>' +
+        '</div>' +
+      '</div>' +
+      '<a href="' + buyHref + '" class="pvai-btn-primary" id="pvai-buy-btn" target="_blank">' +
+        ICON_CART.replace('stroke="currentColor"', 'stroke="white"') + ' Comprar agora' +
+      '</a>' +
+      '<button class="pvai-btn-secondary" id="pvai-retry-btn">' +
+        ICON_RETRY + ' Tentar com outra foto' +
+      '</button>' +
+      '<button class="pvai-btn-secondary" id="pvai-share-btn" style="margin-top:4px;">' +
+        ICON_SHARE + ' Compartilhar look' +
+      '</button>';
+
+    var buyBtn = document.getElementById('pvai-buy-btn');
+    if (buyBtn) buyBtn.onclick = trackConversion;
+
+    var retryBtn = document.getElementById('pvai-retry-btn');
+    if (retryBtn) retryBtn.onclick = function () {
       state.userPhotoFile = null;
       state.userPhotoUrl = null;
       state.resultUrl = null;
       goToStep(1);
       rebuildStep1();
     };
-    document.getElementById('pvai-share-btn').onclick = shareResult;
+
+    var shareBtn = document.getElementById('pvai-share-btn');
+    if (shareBtn) shareBtn.onclick = shareResult;
   }
 
   function trackConversion() {
