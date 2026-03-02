@@ -746,12 +746,30 @@
     };
   }
 
+  // Reduz a imagem para max 1024px e JPEG 75% antes de enviar (evita body > 4.5MB)
+  function compressImage(dataUrl, callback) {
+    var img = new Image();
+    img.onload = function () {
+      var MAX = 1024;
+      var w = img.width, h = img.height;
+      if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; }
+      if (h > MAX) { w = Math.round(w * MAX / h); h = MAX; }
+      var canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      callback(canvas.toDataURL('image/jpeg', 0.75));
+    };
+    img.src = dataUrl;
+  }
+
   function handlePhotoSelected(file) {
     state.userPhotoFile = file;
     var reader = new FileReader();
     reader.onload = function (e) {
-      state.userPhotoUrl = e.target.result;
-      showPhotoPreview();
+      compressImage(e.target.result, function (compressed) {
+        state.userPhotoUrl = compressed;
+        showPhotoPreview();
+      });
     };
     reader.readAsDataURL(file);
   }
