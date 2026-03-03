@@ -43,6 +43,21 @@ async function resolveImageUrl(img: string | Blob): Promise<string> {
 
 export type ClothingCategory = 'upper_body' | 'lower_body' | 'dresses';
 
+// Melhora a descrição do produto para o modelo (que funciona melhor em inglês)
+function buildGarmentDescription(rawName: string, category: ClothingCategory): string {
+  if (!rawName || rawName === 'clothing garment') {
+    const fallback: Record<ClothingCategory, string> = {
+      upper_body: 'casual top, clean product photo, high quality fabric',
+      lower_body: 'pants, clean product photo, high quality fabric',
+      dresses:    'dress, clean product photo, high quality fabric',
+    };
+    return fallback[category];
+  }
+  // Limpa o nome e adiciona contexto para o modelo
+  const clean = rawName.replace(/[^\w\s,\-().]/g, '').slice(0, 120);
+  return `${clean}, product photo, high quality`;
+}
+
 export async function createClothingTryOn(params: {
   userPhotoUrl: string | Blob;
   garmentUrl: string | Blob;
@@ -53,13 +68,14 @@ export async function createClothingTryOn(params: {
   const garmImg = await resolveImageUrl(params.garmentUrl);
 
   const category = params.category ?? 'upper_body';
+  const garmentDes = buildGarmentDescription(params.garmentDesc || '', category);
 
   const prediction = await replicate.predictions.create({
     version: IDM_VTON_VERSION,
     input: {
       human_img:    humanImg,
       garm_img:     garmImg,
-      garment_des:  params.garmentDesc || 'clothing garment, high quality',
+      garment_des:  garmentDes,
       category,
       crop:         true,
       seed:         42,

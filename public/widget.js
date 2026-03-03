@@ -307,55 +307,90 @@
       100% { width: 95%; }
     }
 
-    /* Step 3: Result */
-    .pvai-result-compare {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-      margin-bottom: 16px;
-    }
-    .pvai-compare-item {
+    /* Step 3: Result — imagem em destaque */
+    .pvai-result-hero {
       position: relative;
-      border-radius: 12px;
+      border-radius: 16px;
       overflow: hidden;
       background: #f8fafc;
+      margin-bottom: 12px;
     }
-    .pvai-compare-item img {
+    .pvai-result-hero img {
       width: 100%;
       aspect-ratio: 3/4;
       object-fit: cover;
+      display: block;
+      transition: opacity 0.3s ease;
     }
-    .pvai-compare-label {
-      position: absolute;
-      bottom: 6px;
-      left: 6px;
-      background: rgba(0,0,0,0.65);
-      color: white;
-      font-size: 10px;
-      font-weight: 600;
-      padding: 3px 8px;
-      border-radius: 6px;
-    }
+    .pvai-result-hero img.pvai-hidden { opacity: 0; position: absolute; top: 0; left: 0; }
+    .pvai-result-hero img.pvai-visible { opacity: 1; position: relative; }
     .pvai-ai-badge {
       position: absolute;
-      top: 6px;
-      right: 6px;
+      top: 10px;
+      left: 10px;
       background: #db2777;
       color: white;
-      font-size: 9px;
+      font-size: 10px;
       font-weight: 700;
-      padding: 3px 7px;
-      border-radius: 6px;
+      padding: 4px 10px;
+      border-radius: 8px;
       letter-spacing: 0.5px;
+      z-index: 2;
     }
-
-    .pvai-result-image-full {
-      width: 100%;
-      border-radius: 16px;
-      margin-bottom: 16px;
-      max-height: 360px;
-      object-fit: contain;
-      background: #f8fafc;
+    .pvai-toggle-btn {
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
+      background: rgba(0,0,0,0.6);
+      color: white;
+      border: 1.5px solid rgba(255,255,255,0.4);
+      border-radius: 10px;
+      padding: 6px 12px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      z-index: 2;
+      backdrop-filter: blur(4px);
+      transition: background 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .pvai-toggle-btn:hover { background: rgba(0,0,0,0.8); }
+    .pvai-toggle-btn svg { width: 14px; height: 14px; }
+    .pvai-result-actions {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+    .pvai-result-actions button, .pvai-result-actions a {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 11px 8px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.15s;
+      border: none;
+    }
+    .pvai-act-buy {
+      background: linear-gradient(135deg, #db2777, #be185d);
+      color: white;
+      box-shadow: 0 3px 10px rgba(219,39,119,0.25);
+    }
+    .pvai-act-share {
+      background: #111;
+      color: white;
+    }
+    .pvai-act-retry {
+      background: #f1f5f9;
+      color: #475569;
+      border: 1px solid #e2e8f0 !important;
     }
 
     /* Buttons */
@@ -644,6 +679,20 @@
     container.appendChild(wrap);
   }
 
+  // Tenta obter a maior resolução disponível da imagem (Shopify CDN, Woo, etc.)
+  function upgradeToHiRes(src) {
+    if (!src) return src;
+    // Shopify: remove _100x, _300x300, _grande, _small, _medium, _compact, _large, _1024x1024 etc.
+    var shopify = src.replace(/_(?:\d+x\d*|\d*x\d+|pico|icon|thumb|small|compact|medium|large|grande|1024x1024|2048x2048)(\.\w+)/, '$1');
+    if (shopify !== src) return shopify;
+    // WooCommerce: remove -100x100, -300x300 etc.
+    var woo = src.replace(/-\d+x\d+(\.\w+)/, '$1');
+    if (woo !== src) return woo;
+    // Genérico: se tem ?width=N, aumenta para 1024
+    if (src.indexOf('width=') !== -1) return src.replace(/width=\d+/, 'width=1024');
+    return src;
+  }
+
   function detectGarmentImage() {
     // Tenta encontrar imagem do produto via seletores comuns
     var selectors = [
@@ -661,7 +710,7 @@
     ];
     for (var i = 0; i < selectors.length; i++) {
       var el = document.querySelector(selectors[i]);
-      if (el && el.src) return el.src;
+      if (el && el.src) return upgradeToHiRes(el.src);
     }
     // Fallback: maior imagem da página
     var imgs = document.querySelectorAll('img');
@@ -674,7 +723,7 @@
         largest = img;
       }
     }
-    return largest ? largest.src : null;
+    return largest ? upgradeToHiRes(largest.src) : null;
   }
 
   function detectProductName() {
@@ -1137,7 +1186,6 @@
   }
 
   function showResult() {
-    // Garante que o modal está aberto (usuário pode ter fechado enquanto aguardava)
     openModal();
     goToStep(3);
 
@@ -1147,30 +1195,44 @@
     var userImgSrc = state.userPhotoUrl || '';
     var resultImgSrc = state.resultUrl || '';
     var buyHref = state.buyUrl || state.productUrl || '#';
+    var ICON_SWAP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>';
 
     container.innerHTML =
-      '<p style="font-size:14px;font-weight:600;color:#111;margin-bottom:12px;">&#10024; Seu look virtual est\u00e1 pronto!</p>' +
-      '<div class="pvai-result-compare">' +
-        '<div class="pvai-compare-item">' +
-          '<img src="' + userImgSrc + '" alt="Voc\u00ea" />' +
-          '<span class="pvai-compare-label">Voc\u00ea</span>' +
-        '</div>' +
-        '<div class="pvai-compare-item" id="pvai-result-img-wrap">' +
-          '<img src="' + resultImgSrc + '" alt="Com a pe\u00e7a"' +
-               ' onerror="this.onerror=null;document.getElementById(\'pvai-result-img-wrap\').innerHTML=\'<a href=\\\'' + resultImgSrc + '\\\' target=\\\'_blank\\\' style=\\\'display:flex;align-items:center;justify-content:center;height:100%;color:#db2777;font-size:12px\\\'>Ver imagem &rarr;</a>\'" />' +
-          '<span class="pvai-compare-label">Com a pe\u00e7a</span>' +
-          '<span class="pvai-ai-badge">IA</span>' +
-        '</div>' +
+      '<div class="pvai-result-hero" id="pvai-hero">' +
+        '<img id="pvai-img-result" class="pvai-visible" src="' + resultImgSrc + '" alt="Resultado IA" />' +
+        '<img id="pvai-img-original" class="pvai-hidden" src="' + userImgSrc + '" alt="Original" />' +
+        '<span class="pvai-ai-badge" id="pvai-badge-label">IA</span>' +
+        '<button class="pvai-toggle-btn" id="pvai-toggle">' + ICON_SWAP + ' <span id="pvai-toggle-text">Ver original</span></button>' +
       '</div>' +
-      '<a href="' + buyHref + '" class="pvai-btn-primary" id="pvai-buy-btn" target="_blank">' +
-        ICON_CART.replace('stroke="currentColor"', 'stroke="white"') + ' Comprar agora' +
-      '</a>' +
-      '<button class="pvai-btn-secondary" id="pvai-retry-btn">' +
+      '<div class="pvai-result-actions">' +
+        '<a href="' + buyHref + '" class="pvai-act-buy" id="pvai-buy-btn" target="_blank">' +
+          ICON_CART.replace('stroke="currentColor"', 'stroke="white"') + ' Comprar' +
+        '</a>' +
+        '<button class="pvai-act-share" id="pvai-share-btn">' +
+          ICON_SHARE + ' Story' +
+        '</button>' +
+      '</div>' +
+      '<button class="pvai-act-retry" id="pvai-retry-btn" style="width:100%">' +
         ICON_RETRY + ' Tentar com outra foto' +
-      '</button>' +
-      '<button class="pvai-btn-secondary" id="pvai-share-btn" style="margin-top:4px;">' +
-        ICON_SHARE + ' Compartilhar look' +
       '</button>';
+
+    // Toggle original ↔ gerada
+    var showingResult = true;
+    var toggleBtn = document.getElementById('pvai-toggle');
+    if (toggleBtn) toggleBtn.onclick = function () {
+      showingResult = !showingResult;
+      var imgR = document.getElementById('pvai-img-result');
+      var imgO = document.getElementById('pvai-img-original');
+      var badge = document.getElementById('pvai-badge-label');
+      var txt = document.getElementById('pvai-toggle-text');
+      if (showingResult) {
+        imgR.className = 'pvai-visible'; imgO.className = 'pvai-hidden';
+        badge.textContent = 'IA'; txt.textContent = 'Ver original';
+      } else {
+        imgR.className = 'pvai-hidden'; imgO.className = 'pvai-visible';
+        badge.textContent = 'Original'; txt.textContent = 'Ver com IA';
+      }
+    };
 
     var buyBtn = document.getElementById('pvai-buy-btn');
     if (buyBtn) buyBtn.onclick = trackConversion;
@@ -1185,7 +1247,7 @@
     };
 
     var shareBtn = document.getElementById('pvai-share-btn');
-    if (shareBtn) shareBtn.onclick = shareResult;
+    if (shareBtn) shareBtn.onclick = shareAsStory;
   }
 
   function trackConversion() {
@@ -1200,17 +1262,112 @@
     }).catch(function () {});
   }
 
-  function shareResult() {
-    if (navigator.share) {
-      navigator.share({
-        title: 'Veja como ficou!',
-        text: 'Experimentei ' + (state.garmentName || 'essa roupa') + ' virtualmente com IA!',
-        url: state.productUrl,
-      }).catch(function () {});
-    } else if (navigator.clipboard) {
-      navigator.clipboard.writeText(state.productUrl);
-      alert('Link copiado!');
-    }
+  // ─── Compartilhamento Story (9:16) ───────────────────────────────────────────
+  function shareAsStory() {
+    var canvas = document.createElement('canvas');
+    var W = 1080, H = 1920; // formato story 9:16
+    canvas.width = W;
+    canvas.height = H;
+    var ctx = canvas.getContext('2d');
+
+    // Fundo gradiente
+    var grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, '#fdf2f8');
+    grad.addColorStop(1, '#fce7f3');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    var resultImg = new Image();
+    resultImg.crossOrigin = 'anonymous';
+    resultImg.onload = function () {
+      // Imagem resultado — centralizada, grande
+      var imgW = W - 80;
+      var imgH = imgW * (4 / 3);
+      var imgX = 40;
+      var imgY = 200;
+
+      // Borda arredondada
+      ctx.save();
+      roundRect(ctx, imgX, imgY, imgW, imgH, 24);
+      ctx.clip();
+      ctx.drawImage(resultImg, imgX, imgY, imgW, imgH);
+      ctx.restore();
+
+      // Badge "IA"
+      ctx.fillStyle = '#db2777';
+      roundRect(ctx, imgX + 16, imgY + 16, 50, 28, 8);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 16px -apple-system, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('IA', imgX + 41, imgY + 36);
+
+      // Texto
+      ctx.fillStyle = '#111';
+      ctx.font = 'bold 36px -apple-system, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('Experimentei virtualmente!', W / 2, imgY + imgH + 60);
+
+      ctx.fillStyle = '#6b7280';
+      ctx.font = '24px -apple-system, sans-serif';
+      var prodName = (state.garmentName || '').slice(0, 40);
+      if (prodName) ctx.fillText(prodName, W / 2, imgY + imgH + 100);
+
+      // Logo no footer
+      ctx.fillStyle = '#db2777';
+      ctx.font = 'bold 20px -apple-system, sans-serif';
+      ctx.fillText('ProvadorVirtualAI', W / 2, H - 80);
+      ctx.fillStyle = '#9ca3af';
+      ctx.font = '16px -apple-system, sans-serif';
+      ctx.fillText('Experimente antes de comprar', W / 2, H - 52);
+
+      // Converte e compartilha
+      canvas.toBlob(function (blob) {
+        if (!blob) return;
+        var file = new File([blob], 'meu-look-virtual.png', { type: 'image/png' });
+
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          navigator.share({
+            title: 'Meu look virtual',
+            text: 'Experimentei ' + (state.garmentName || 'essa roupa') + ' com IA!',
+            files: [file],
+          }).catch(function () {});
+        } else {
+          // Fallback: abre a imagem em nova aba para salvar
+          var url = URL.createObjectURL(blob);
+          var a = document.createElement('a');
+          a.href = url;
+          a.download = 'meu-look-virtual.png';
+          a.click();
+          setTimeout(function () { URL.revokeObjectURL(url); }, 5000);
+        }
+      }, 'image/png');
+    };
+    resultImg.onerror = function () {
+      // Fallback se CORS bloquear a imagem
+      if (navigator.share) {
+        navigator.share({
+          title: 'Veja como ficou!',
+          text: 'Experimentei ' + (state.garmentName || 'essa roupa') + ' virtualmente com IA!',
+          url: state.productUrl,
+        }).catch(function () {});
+      }
+    };
+    resultImg.src = state.resultUrl;
+  }
+
+  function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
   }
 
   // ─── Helpers ──────────────────────────────────────────────────────────────────
