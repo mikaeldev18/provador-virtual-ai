@@ -67,8 +67,10 @@ export async function GET(req: NextRequest) {
 // ─── POST: inicia geração (retorna imediatamente com predictionId) ─────────────
 export async function POST(req: NextRequest) {
   try {
-    const { storeId, userPhotoUrl, garmentUrl, productUrl, productName, sessionId } =
-      await req.json();
+    const {
+      storeId, userPhotoUrl, garmentUrl, productUrl, productName,
+      sessionId, productType, category,
+    } = await req.json();
 
     if (!storeId || !userPhotoUrl || !garmentUrl) {
       return NextResponse.json(
@@ -120,7 +122,9 @@ export async function POST(req: NextRequest) {
     const { predictionId, cost } = await createTryOnPrediction({
       userPhotoUrl: userPhoto,
       garmentUrl:   garment,
-      garmentDesc:  productName ?? 'roupa',
+      garmentDesc:  productName || 'clothing garment',
+      productType:  productType ?? 'clothing',
+      category:     category ?? 'upper_body',
     });
 
     // Registra uso (com custo estimado)

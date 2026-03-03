@@ -541,6 +541,8 @@
     buyUrl: null,
     error: null,
     cameraStream: null,
+    productType: 'clothing', // 'clothing' | 'jewelry'
+    category: 'upper_body',  // clothing: upper_body|lower_body|dresses  jewelry: necklace|bracelet|earring|ring|watch
   };
 
   // ─── Init ─────────────────────────────────────────────────────────────────────
@@ -571,6 +573,12 @@
     state.garmentName = detectProductName();
     state.productUrl = window.location.href;
     state.buyUrl = detectBuyUrl();
+
+    // Detecta tipo de produto e categoria automaticamente
+    var detected = detectProductType();
+    state.productType = container.dataset.type || detected.type;
+    state.category = container.dataset.category || detected.category;
+    console.log('[PVAI] Detected:', state.productType, state.category, state.garmentName);
 
     injectStyles();
     if (color !== '#db2777') injectColorOverride(color);
@@ -685,6 +693,42 @@
       if (el && el.textContent.trim()) return el.textContent.trim().slice(0, 80);
     }
     return document.title.slice(0, 80);
+  }
+
+  // Detecta tipo de produto (roupa vs joia) e categoria a partir do nome e tags da página
+  function detectProductType() {
+    var name = (state.garmentName || '').toLowerCase();
+    var bodyText = (document.body ? document.body.innerText : '').toLowerCase().slice(0, 3000);
+    var meta = (document.querySelector('meta[name="keywords"]') || {}).content || '';
+    var text = name + ' ' + meta.toLowerCase();
+
+    // Joias / acessórios
+    var jewelryMap = {
+      'necklace': ['necklace', 'colar', 'corrente', 'chain', 'pendant', 'pingente', 'gargantilha', 'choker'],
+      'bracelet': ['bracelet', 'pulseira', 'bracelete', 'bangle'],
+      'earring':  ['earring', 'brinco', 'ear cuff', 'argola'],
+      'ring':     [' ring ', 'anel', 'aliança', 'alliance'],
+      'watch':    ['watch', 'relógio', 'relogio', 'smartwatch'],
+    };
+    for (var cat in jewelryMap) {
+      var keywords = jewelryMap[cat];
+      for (var i = 0; i < keywords.length; i++) {
+        if (text.indexOf(keywords[i]) !== -1) {
+          return { type: 'jewelry', category: cat };
+        }
+      }
+    }
+
+    // Roupas — detecta categoria
+    var lowerBody = ['pants', 'calça', 'calca', 'shorts', 'short', 'skirt', 'saia', 'jeans', 'trousers', 'legging', 'bermuda'];
+    var dresses   = ['dress', 'vestido', 'jumpsuit', 'macacão', 'macacao', 'romper', 'bodysuit'];
+    for (var j = 0; j < dresses.length; j++) {
+      if (text.indexOf(dresses[j]) !== -1) return { type: 'clothing', category: 'dresses' };
+    }
+    for (var k = 0; k < lowerBody.length; k++) {
+      if (text.indexOf(lowerBody[k]) !== -1) return { type: 'clothing', category: 'lower_body' };
+    }
+    return { type: 'clothing', category: 'upper_body' };
   }
 
   function detectBuyUrl() {
@@ -1028,6 +1072,8 @@
         productUrl: state.productUrl,
         productName: state.garmentName,
         sessionId: SESSION_ID,
+        productType: state.productType,
+        category: state.category,
       }),
     })
       .then(function (res) { return res.json(); })
