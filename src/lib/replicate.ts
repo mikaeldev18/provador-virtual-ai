@@ -11,7 +11,7 @@ export interface TryOnResult {
 
 // ─── Modelos ──────────────────────────────────────────────────────────────────
 const IDM_VTON_VERSION = '0513734a452173b8173e907e3a59d19a36266e55b48528559432bd21c7d7e985';
-const FLUX_FILL_VERSION = 'a053f84125613d83e65328a289e14eb6639e10725c243e8fb0c24128e5573f4c';
+const FLUX_PRO_VERSION = '609793a667ed94b210242837d3c3c9fc9a64ae93685f15d75002ba0ed9a97f2b';
 
 // ─── Upload explícito para o Replicate Files API ─────────────────────────────
 async function uploadBlobToReplicate(blob: Blob): Promise<string> {
@@ -96,30 +96,11 @@ export async function createClothingTryOn(params: {
   return { predictionId: prediction.id, cost: 0.10 };
 }
 
-// ─── Joias / Acessórios: FLUX Fill Dev (inpainting) ─────────────────────────
+// ─── Joias / Acessórios: FLUX 1.1 Pro (Redux image_prompt) ──────────────────
 
 export type JewelryCategory = 'necklace' | 'bracelet' | 'earring' | 'ring' | 'watch';
 
-// Gera uma máscara SVG inline (branco = área de inpainting)
-function buildJewelryMaskSvg(category: JewelryCategory): string {
-  // A máscara define a área onde o modelo vai "pintar" a joia
-  const regions: Record<JewelryCategory, string> = {
-    necklace:  '<ellipse cx="50%" cy="32%" rx="28%" ry="14%" fill="white"/>',
-    bracelet:  '<ellipse cx="18%" cy="68%" rx="12%" ry="8%" fill="white"/><ellipse cx="82%" cy="68%" rx="12%" ry="8%" fill="white"/>',
-    earring:   '<ellipse cx="28%" cy="22%" rx="6%" ry="10%" fill="white"/><ellipse cx="72%" cy="22%" rx="6%" ry="10%" fill="white"/>',
-    ring:      '<ellipse cx="18%" cy="72%" rx="8%" ry="6%" fill="white"/><ellipse cx="82%" cy="72%" rx="8%" ry="6%" fill="white"/>',
-    watch:     '<ellipse cx="16%" cy="65%" rx="10%" ry="8%" fill="white"/>',
-  };
-
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 768 1024">` +
-    `<rect width="100%" height="100%" fill="black"/>` +
-    regions[category] +
-    `</svg>`
-  )}`;
-}
-
-// ─── Prompt avançado para joias (FLUX Fill Dev inpainting) ───────────────────
+// ─── Prompt avançado para joias (FLUX 1.1 Pro + Redux image_prompt) ──────────
 // Prompt profissional focado em autenticidade, luster e preservação da identidade.
 function buildJewelryPrompt(productName: string, category: JewelryCategory): string {
   const jewelryHint: Record<JewelryCategory, string> = {
@@ -159,19 +140,19 @@ export async function createJewelryTryOn(params: {
   const category = params.category ?? 'necklace';
 
   const prediction = await replicate.predictions.create({
-    version: FLUX_FILL_VERSION,
+    version: FLUX_PRO_VERSION,
     input: {
-      image:     humanImg,
-      mask:      buildJewelryMaskSvg(category),
-      prompt:    buildJewelryPrompt(params.productName ?? '', category),
-      guidance:  30,
-      num_inference_steps: 40,
-      output_format: 'jpg',
-      output_quality: 95,
+      prompt:            buildJewelryPrompt(params.productName ?? '', category),
+      image_prompt:      humanImg,
+      aspect_ratio:      '3:4',
+      output_format:     'jpg',
+      output_quality:    95,
+      safety_tolerance:  3,
+      prompt_upsampling: true,
     },
   });
 
-  return { predictionId: prediction.id, cost: 0.06 };
+  return { predictionId: prediction.id, cost: 0.04 };
 }
 
 // ─── Roteador: decide qual modelo usar ───────────────────────────────────────
@@ -214,7 +195,7 @@ export async function getTryOnStatus(predictionId: string): Promise<{
 
   if (prediction.status === 'succeeded') {
     const output = prediction.output;
-    // IDM-VTON retorna string, FLUX Fill retorna array
+    // IDM-VTON retorna string, FLUX 1.1 Pro retorna string URL
     let imageUrl: string;
     if (Array.isArray(output)) {
       imageUrl = String(output[0]);
