@@ -37,7 +37,7 @@ export default function EmbedPage() {
   const { data: session } = useSession();
   const user = session?.user as any;
   const storeId = user?.storeId ?? 'SEU_STORE_ID';
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://provador-virtual-ai.vercel.app';
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://provador-virtual-ai.vercel.app').trim();
 
   // ── Configurações do widget ──────────────────────────────────────────────────
   const [widgetMode, setWidgetMode]   = useState<'float' | 'banner'>('float');
