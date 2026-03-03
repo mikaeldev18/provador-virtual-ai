@@ -43,19 +43,28 @@ async function resolveImageUrl(img: string | Blob): Promise<string> {
 
 export type ClothingCategory = 'upper_body' | 'lower_body' | 'dresses';
 
-// Melhora a descrição do produto para o modelo (que funciona melhor em inglês)
+// ─── Prompt avançado para roupas (IDM-VTON garment_des) ──────────────────────
+// O garment_des do IDM-VTON aceita descrição do vestuário que guia a geração.
+// Quanto mais detalhada e precisa, melhor o resultado.
 function buildGarmentDescription(rawName: string, category: ClothingCategory): string {
-  if (!rawName || rawName === 'clothing garment') {
-    const fallback: Record<ClothingCategory, string> = {
-      upper_body: 'casual top, clean product photo, high quality fabric',
-      lower_body: 'pants, clean product photo, high quality fabric',
-      dresses:    'dress, clean product photo, high quality fabric',
-    };
-    return fallback[category];
-  }
-  // Limpa o nome e adiciona contexto para o modelo
-  const clean = rawName.replace(/[^\w\s,\-().]/g, '').slice(0, 120);
-  return `${clean}, product photo, high quality`;
+  const categoryHint: Record<ClothingCategory, string> = {
+    upper_body: 'top/blouse/shirt',
+    lower_body: 'pants/trousers/shorts',
+    dresses:    'dress/jumpsuit',
+  };
+
+  const itemName = rawName && rawName !== 'clothing garment'
+    ? rawName.replace(/[^\w\s,\-().'/]/g, '').slice(0, 100)
+    : categoryHint[category];
+
+  return (
+    `Masterpiece, high-fidelity fashion imagery. ` +
+    `The garment is: ${itemName}. ` +
+    `Render with perfect accuracy to the real product's exact color, fabric curves, and intricate texture, ` +
+    `showing realistic textile weight and stitching details. ` +
+    `Professional color grading, optimized saturation to make the garment's color vibrant and true-to-life. ` +
+    `Ultra-sharp focus on clothing texture, 8k resolution, professional retouching aesthetic.`
+  );
 }
 
 export async function createClothingTryOn(params: {
@@ -110,20 +119,35 @@ function buildJewelryMaskSvg(category: JewelryCategory): string {
   )}`;
 }
 
+// ─── Prompt avançado para joias (FLUX Fill Dev inpainting) ───────────────────
+// Prompt profissional focado em autenticidade, luster e preservação da identidade.
 function buildJewelryPrompt(productName: string, category: JewelryCategory): string {
-  const base: Record<JewelryCategory, string> = {
-    necklace:  'wearing an elegant necklace',
-    bracelet:  'wearing a bracelet on the wrist',
-    earring:   'wearing beautiful earrings',
-    ring:      'wearing a ring on the finger',
-    watch:     'wearing a wristwatch',
+  const jewelryHint: Record<JewelryCategory, string> = {
+    necklace:  'necklace sitting naturally on the neck and chest',
+    bracelet:  'bracelet on the wrist',
+    earring:   'earrings on the ears',
+    ring:      'ring on the finger',
+    watch:     'wristwatch on the wrist',
   };
 
-  const desc = productName
-    ? `${base[category]}, ${productName}, `
-    : `${base[category]}, `;
+  const itemDesc = productName
+    ? productName.replace(/[^\w\s,\-().'/]/g, '').slice(0, 100)
+    : category;
 
-  return `photorealistic portrait of a person ${desc}jewelry product photography, natural lighting, high detail, 8k`;
+  return (
+    `Ultra-realistic, commercial luxury jewelry photography, close-up shot. ` +
+    `CRITICAL: The model's facial features, expression, skin texture, body shape, and hair color/style ` +
+    `must be an exact match to the reference image, preserved without any change. NO modifications to her identity. ` +
+    `She is adorned with the specific ${itemDesc}, a ${jewelryHint[category]}. ` +
+    `The jewelry must be rendered with perfect accuracy to the real product's exact color, luster, and detailed texture, ` +
+    `sitting naturally on her skin. ` +
+    `The background must be the identical setting from the original photo, with the same ambient lighting. ` +
+    `Realistic lighting adjustments are permitted ONLY on the model's skin to show natural light interactions ` +
+    `(reflections, contact shadows) with the jewelry. ` +
+    `Advanced color depth. Boosted saturation applied only to enhance the metal warmth and gem color, ` +
+    `making them look vibrant and precious, while keeping the model's natural coloring and skin tone true. ` +
+    `Perfect focus on the jewelry and her face, octane render quality, hyper-realism.`
+  );
 }
 
 export async function createJewelryTryOn(params: {
@@ -141,9 +165,9 @@ export async function createJewelryTryOn(params: {
       mask:      buildJewelryMaskSvg(category),
       prompt:    buildJewelryPrompt(params.productName ?? '', category),
       guidance:  30,
-      num_inference_steps: 35,
+      num_inference_steps: 40,
       output_format: 'jpg',
-      output_quality: 90,
+      output_quality: 95,
     },
   });
 
