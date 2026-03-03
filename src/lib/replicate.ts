@@ -10,7 +10,7 @@ export interface TryOnResult {
 }
 
 // ─── Modelo ──────────────────────────────────────────────────────────────────
-const FLUX_PRO_VERSION = '609793a667ed94b210242837d3c3c9fc9a64ae93685f15d75002ba0ed9a97f2b';
+const IDM_VTON_VERSION = '0513734a452173b8173e907e3a59d19a36266e55b48528559432bd21c7d7e985';
 
 // ─── Upload explícito para o Replicate Files API ─────────────────────────────
 async function uploadBlobToReplicate(blob: Blob): Promise<string> {
@@ -38,12 +38,16 @@ async function resolveImageUrl(img: string | Blob): Promise<string> {
   return img instanceof Blob ? await uploadBlobToReplicate(img) : img;
 }
 
-// ─── Roupas: FLUX 1.1 Pro (Redux image_prompt) ──────────────────────────────
+// ─── Categorias ──────────────────────────────────────────────────────────────
 
 export type ClothingCategory = 'upper_body' | 'lower_body' | 'dresses';
+export type JewelryCategory = 'necklace' | 'bracelet' | 'earring' | 'ring' | 'watch';
+export type ProductType = 'clothing' | 'jewelry';
 
-// ─── Prompt avançado para roupas (FLUX 1.1 Pro) ─────────────────────────────
-function buildClothingPrompt(rawName: string, category: ClothingCategory): string {
+// ─── Prompt avançado (garment_des do IDM-VTON) ──────────────────────────────
+// Quanto mais detalhada e precisa, melhor o resultado.
+
+function buildGarmentDescription(rawName: string, category: ClothingCategory): string {
   const categoryHint: Record<ClothingCategory, string> = {
     upper_body: 'top/blouse/shirt',
     lower_body: 'pants/trousers/shorts',
@@ -55,18 +59,39 @@ function buildClothingPrompt(rawName: string, category: ClothingCategory): strin
     : categoryHint[category];
 
   return (
-    `Ultra-realistic fashion photography, full-body shot. ` +
-    `CRITICAL: The person's facial features, expression, skin texture, body shape, and hair color/style ` +
-    `must be an exact match to the reference image, preserved without any change. NO modifications to their identity. ` +
-    `The person is wearing: ${itemName}. ` +
     `Masterpiece, high-fidelity fashion imagery. ` +
-    `Render the garment with perfect accuracy to the real product's exact color, fabric curves, and intricate texture, ` +
+    `The garment is: ${itemName}. ` +
+    `Render with perfect accuracy to the real product's exact color, fabric curves, and intricate texture, ` +
     `showing realistic textile weight and stitching details. ` +
-    `The background must be the identical setting from the original photo, with the same ambient lighting. ` +
     `Professional color grading, optimized saturation to make the garment's color vibrant and true-to-life. ` +
     `Ultra-sharp focus on clothing texture, 8k resolution, professional retouching aesthetic.`
   );
 }
+
+function buildJewelryDescription(productName: string, category: JewelryCategory): string {
+  const jewelryHint: Record<JewelryCategory, string> = {
+    necklace:  'elegant necklace',
+    bracelet:  'stylish bracelet',
+    earring:   'refined earrings',
+    ring:      'exquisite ring',
+    watch:     'luxury wristwatch',
+  };
+
+  const itemDesc = productName
+    ? productName.replace(/[^\w\s,\-().'/]/g, '').slice(0, 100)
+    : jewelryHint[category];
+
+  return (
+    `Ultra-realistic commercial luxury jewelry photography. ` +
+    `The jewelry is: ${itemDesc}. ` +
+    `Render with perfect accuracy to the real product's exact color, luster, and detailed texture, ` +
+    `sitting naturally on the person's skin. ` +
+    `Advanced color depth, boosted saturation to enhance metal warmth and gem color. ` +
+    `Perfect focus on the jewelry, octane render quality, hyper-realism, 8k resolution.`
+  );
+}
+
+// ─── IDM-VTON para roupas ────────────────────────────────────────────────────
 
 export async function createClothingTryOn(params: {
   userPhotoUrl: string | Blob;
@@ -75,88 +100,70 @@ export async function createClothingTryOn(params: {
   category?: ClothingCategory;
 }): Promise<{ predictionId: string; cost: number }> {
   const humanImg = await resolveImageUrl(params.userPhotoUrl);
+  const garmImg = await resolveImageUrl(params.garmentUrl);
 
   const category = params.category ?? 'upper_body';
-  const prompt = buildClothingPrompt(params.garmentDesc || '', category);
+  const garmentDes = buildGarmentDescription(params.garmentDesc || '', category);
 
   const prediction = await replicate.predictions.create({
-    version: FLUX_PRO_VERSION,
+    version: IDM_VTON_VERSION,
     input: {
-      prompt,
-      image_prompt:      humanImg,
-      aspect_ratio:      '3:4',
-      output_format:     'jpg',
-      output_quality:    95,
-      safety_tolerance:  3,
-      prompt_upsampling: true,
+      human_img:    humanImg,
+      garm_img:     garmImg,
+      garment_des:  garmentDes,
+      category,
+      crop:         true,
+      seed:         42,
+      steps:        40,
+      force_dc:     category === 'dresses',
     },
   });
 
-  return { predictionId: prediction.id, cost: 0.04 };
+  return { predictionId: prediction.id, cost: 0.10 };
 }
 
-// ─── Joias / Acessórios: FLUX 1.1 Pro (Redux image_prompt) ──────────────────
-
-export type JewelryCategory = 'necklace' | 'bracelet' | 'earring' | 'ring' | 'watch';
-
-// ─── Prompt avançado para joias (FLUX 1.1 Pro + Redux image_prompt) ──────────
-// Prompt profissional focado em autenticidade, luster e preservação da identidade.
-function buildJewelryPrompt(productName: string, category: JewelryCategory): string {
-  const jewelryHint: Record<JewelryCategory, string> = {
-    necklace:  'necklace sitting naturally on the neck and chest',
-    bracelet:  'bracelet on the wrist',
-    earring:   'earrings on the ears',
-    ring:      'ring on the finger',
-    watch:     'wristwatch on the wrist',
-  };
-
-  const itemDesc = productName
-    ? productName.replace(/[^\w\s,\-().'/]/g, '').slice(0, 100)
-    : category;
-
-  return (
-    `Ultra-realistic, commercial luxury jewelry photography, close-up shot. ` +
-    `CRITICAL: The model's facial features, expression, skin texture, body shape, and hair color/style ` +
-    `must be an exact match to the reference image, preserved without any change. NO modifications to her identity. ` +
-    `She is adorned with the specific ${itemDesc}, a ${jewelryHint[category]}. ` +
-    `The jewelry must be rendered with perfect accuracy to the real product's exact color, luster, and detailed texture, ` +
-    `sitting naturally on her skin. ` +
-    `The background must be the identical setting from the original photo, with the same ambient lighting. ` +
-    `Realistic lighting adjustments are permitted ONLY on the model's skin to show natural light interactions ` +
-    `(reflections, contact shadows) with the jewelry. ` +
-    `Advanced color depth. Boosted saturation applied only to enhance the metal warmth and gem color, ` +
-    `making them look vibrant and precious, while keeping the model's natural coloring and skin tone true. ` +
-    `Perfect focus on the jewelry and her face, octane render quality, hyper-realism.`
-  );
-}
+// ─── IDM-VTON para joias / acessórios ───────────────────────────────────────
+// Usa a imagem do produto (joia) como garm_img e category upper_body
+// para que o modelo sobreponha a joia na região do tronco/pescoço.
 
 export async function createJewelryTryOn(params: {
   userPhotoUrl: string | Blob;
+  garmentUrl: string | Blob;
   productName?: string;
   category?: JewelryCategory;
 }): Promise<{ predictionId: string; cost: number }> {
   const humanImg = await resolveImageUrl(params.userPhotoUrl);
+  const jewelryImg = await resolveImageUrl(params.garmentUrl);
   const category = params.category ?? 'necklace';
 
+  const garmentDes = buildJewelryDescription(params.productName ?? '', category);
+
+  // Mapeia categoria de joia → categoria IDM-VTON
+  const vtonCategory: ClothingCategory =
+    category === 'necklace' || category === 'earring'
+      ? 'upper_body'
+      : category === 'bracelet' || category === 'ring' || category === 'watch'
+        ? 'upper_body'
+        : 'upper_body';
+
   const prediction = await replicate.predictions.create({
-    version: FLUX_PRO_VERSION,
+    version: IDM_VTON_VERSION,
     input: {
-      prompt:            buildJewelryPrompt(params.productName ?? '', category),
-      image_prompt:      humanImg,
-      aspect_ratio:      '3:4',
-      output_format:     'jpg',
-      output_quality:    95,
-      safety_tolerance:  3,
-      prompt_upsampling: true,
+      human_img:    humanImg,
+      garm_img:     jewelryImg,
+      garment_des:  garmentDes,
+      category:     vtonCategory,
+      crop:         true,
+      seed:         42,
+      steps:        40,
+      force_dc:     false,
     },
   });
 
-  return { predictionId: prediction.id, cost: 0.04 };
+  return { predictionId: prediction.id, cost: 0.10 };
 }
 
-// ─── Roteador: decide qual modelo usar ───────────────────────────────────────
-
-export type ProductType = 'clothing' | 'jewelry';
+// ─── Roteador: decide qual fluxo usar ───────────────────────────────────────
 
 export async function createTryOnPrediction(params: {
   userPhotoUrl: string | Blob;
@@ -170,6 +177,7 @@ export async function createTryOnPrediction(params: {
   if (type === 'jewelry') {
     return createJewelryTryOn({
       userPhotoUrl:  params.userPhotoUrl,
+      garmentUrl:    params.garmentUrl,
       productName:   params.garmentDesc,
       category:      (params.category as JewelryCategory) ?? 'necklace',
     });
@@ -183,7 +191,7 @@ export async function createTryOnPrediction(params: {
   });
 }
 
-// ─── Status (funciona para ambos os modelos) ─────────────────────────────────
+// ─── Status ──────────────────────────────────────────────────────────────────
 
 export async function getTryOnStatus(predictionId: string): Promise<{
   status: string;
@@ -194,7 +202,7 @@ export async function getTryOnStatus(predictionId: string): Promise<{
 
   if (prediction.status === 'succeeded') {
     const output = prediction.output;
-    // FLUX 1.1 Pro retorna string URL
+    // IDM-VTON retorna string
     let imageUrl: string;
     if (Array.isArray(output)) {
       imageUrl = String(output[0]);
