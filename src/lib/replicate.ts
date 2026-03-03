@@ -9,8 +9,7 @@ export interface TryOnResult {
   cost: number;
 }
 
-// ─── Modelos ──────────────────────────────────────────────────────────────────
-const IDM_VTON_VERSION = '0513734a452173b8173e907e3a59d19a36266e55b48528559432bd21c7d7e985';
+// ─── Modelo ──────────────────────────────────────────────────────────────────
 const FLUX_PRO_VERSION = '609793a667ed94b210242837d3c3c9fc9a64ae93685f15d75002ba0ed9a97f2b';
 
 // ─── Upload explícito para o Replicate Files API ─────────────────────────────
@@ -39,14 +38,12 @@ async function resolveImageUrl(img: string | Blob): Promise<string> {
   return img instanceof Blob ? await uploadBlobToReplicate(img) : img;
 }
 
-// ─── Roupas: IDM-VTON (virtual try-on dedicado) ─────────────────────────────
+// ─── Roupas: FLUX 1.1 Pro (Redux image_prompt) ──────────────────────────────
 
 export type ClothingCategory = 'upper_body' | 'lower_body' | 'dresses';
 
-// ─── Prompt avançado para roupas (IDM-VTON garment_des) ──────────────────────
-// O garment_des do IDM-VTON aceita descrição do vestuário que guia a geração.
-// Quanto mais detalhada e precisa, melhor o resultado.
-function buildGarmentDescription(rawName: string, category: ClothingCategory): string {
+// ─── Prompt avançado para roupas (FLUX 1.1 Pro) ─────────────────────────────
+function buildClothingPrompt(rawName: string, category: ClothingCategory): string {
   const categoryHint: Record<ClothingCategory, string> = {
     upper_body: 'top/blouse/shirt',
     lower_body: 'pants/trousers/shorts',
@@ -58,10 +55,14 @@ function buildGarmentDescription(rawName: string, category: ClothingCategory): s
     : categoryHint[category];
 
   return (
+    `Ultra-realistic fashion photography, full-body shot. ` +
+    `CRITICAL: The person's facial features, expression, skin texture, body shape, and hair color/style ` +
+    `must be an exact match to the reference image, preserved without any change. NO modifications to their identity. ` +
+    `The person is wearing: ${itemName}. ` +
     `Masterpiece, high-fidelity fashion imagery. ` +
-    `The garment is: ${itemName}. ` +
-    `Render with perfect accuracy to the real product's exact color, fabric curves, and intricate texture, ` +
+    `Render the garment with perfect accuracy to the real product's exact color, fabric curves, and intricate texture, ` +
     `showing realistic textile weight and stitching details. ` +
+    `The background must be the identical setting from the original photo, with the same ambient lighting. ` +
     `Professional color grading, optimized saturation to make the garment's color vibrant and true-to-life. ` +
     `Ultra-sharp focus on clothing texture, 8k resolution, professional retouching aesthetic.`
   );
@@ -74,26 +75,24 @@ export async function createClothingTryOn(params: {
   category?: ClothingCategory;
 }): Promise<{ predictionId: string; cost: number }> {
   const humanImg = await resolveImageUrl(params.userPhotoUrl);
-  const garmImg = await resolveImageUrl(params.garmentUrl);
 
   const category = params.category ?? 'upper_body';
-  const garmentDes = buildGarmentDescription(params.garmentDesc || '', category);
+  const prompt = buildClothingPrompt(params.garmentDesc || '', category);
 
   const prediction = await replicate.predictions.create({
-    version: IDM_VTON_VERSION,
+    version: FLUX_PRO_VERSION,
     input: {
-      human_img:    humanImg,
-      garm_img:     garmImg,
-      garment_des:  garmentDes,
-      category,
-      crop:         true,
-      seed:         42,
-      steps:        40,
-      force_dc:     category === 'dresses',
+      prompt,
+      image_prompt:      humanImg,
+      aspect_ratio:      '3:4',
+      output_format:     'jpg',
+      output_quality:    95,
+      safety_tolerance:  3,
+      prompt_upsampling: true,
     },
   });
 
-  return { predictionId: prediction.id, cost: 0.10 };
+  return { predictionId: prediction.id, cost: 0.04 };
 }
 
 // ─── Joias / Acessórios: FLUX 1.1 Pro (Redux image_prompt) ──────────────────
@@ -195,7 +194,7 @@ export async function getTryOnStatus(predictionId: string): Promise<{
 
   if (prediction.status === 'succeeded') {
     const output = prediction.output;
-    // IDM-VTON retorna string, FLUX 1.1 Pro retorna string URL
+    // FLUX 1.1 Pro retorna string URL
     let imageUrl: string;
     if (Array.isArray(output)) {
       imageUrl = String(output[0]);
